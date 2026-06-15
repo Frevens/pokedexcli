@@ -8,37 +8,78 @@ import (
 	"unicode"
 )
 
+type cliCommand struct {
+	name        string
+	description string
+	callback    func() error
+}
+
+var commands = map[string]cliCommand{
+	"help": {
+		name:        "help",
+		description: "Displays a help message",
+		callback:    commandHelp,
+	},
+	"exit": {
+		name:        "exit",
+		description: "Exit the Pokedex",
+		callback:    commandExit,
+	},
+}
+
+func commandExit() error {
+	fmt.Println("Closing the Pokedex... Goodbye!")
+	os.Exit(0)
+	return nil // Nunca se ejecuta, pero satisface al compilador.
+}
+
+func commandHelp() error {
+	fmt.Println("Welcome to the Pokedex!")
+	fmt.Println("Usage:")
+	fmt.Println()
+	fmt.Println("help: Displays a help message")
+	fmt.Println("exit: Exit the Pokedex")
+	return nil
+}
 func startRepl() {
 	scanner := bufio.NewScanner(os.Stdin)
 
 	for {
-		// 1. Imprimir prompt sin salto de línea
+		// Mostrar el prompt
 		fmt.Print("Pokedex > ")
 
-		// 2. Esperar input del usuario (bloqueante)
+		// Leer una línea
 		if !scanner.Scan() {
-			// Si hay error o EOF (Ctrl+D/Ctrl+Z), salir del loop
 			break
 		}
 
-		input := scanner.Text()
+		// Limpiar el input
+		palabras := cleanInput(scanner.Text())
 
-		// 3. Limpiar el input
-		palabras := cleanInput(input)
-
-		// 4. Capturar la primera palabra y responder
-		if len(palabras) > 0 {
-			comando := palabras[0]
-			fmt.Printf("Your command was: %s\n", comando)
-		} else {
-			// Opcional: manejar input vacío
-			fmt.Println("Comando vacío.")
+		// Ignorar líneas vacías
+		if len(palabras) == 0 {
+			continue
 		}
+
+		// Buscar el comando
+		comando := palabras[0]
+		cmd, ok := commands[comando]
+		if !ok {
+			fmt.Println("Unknown command")
+			continue
+		}
+
+		// Ejecutar el callback
+		if err := cmd.callback(); err != nil {
+			fmt.Println(err)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Println(err)
 	}
 }
 
 func cleanInput(text string) []string {
-	// 1. Pasar a minúsculas y limpiar espacios extremos
 	text = strings.ToLower(strings.TrimSpace(text))
 
 	if text == "" {
@@ -48,22 +89,17 @@ func cleanInput(text string) []string {
 	var palabras []string
 	var actual strings.Builder
 
-	// 2. Iterar rune por rune para manejar UTF-8 correctamente
 	for _, r := range text {
-		// Si es letra o número, lo agregamos a la palabra actual
 		if unicode.IsLetter(r) || unicode.IsDigit(r) {
 			actual.WriteRune(r)
 		} else if unicode.IsSpace(r) {
-			// Si es espacio y tenemos una palabra acumulada, la guardamos
 			if actual.Len() > 0 {
 				palabras = append(palabras, actual.String())
 				actual.Reset()
 			}
 		}
-		// Si es un signo de puntuación, simplemente lo ignoramos (no hacemos nada)
 	}
 
-	// 3. Agregar la última palabra si existe
 	if actual.Len() > 0 {
 		palabras = append(palabras, actual.String())
 	}
