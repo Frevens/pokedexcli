@@ -9,6 +9,8 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"time"
+	"github.com/frevens/pokedexcli/internal/pokecache"
 )
 
 type cliCommand struct {
@@ -59,6 +61,7 @@ type LocationArea struct {
 type config struct {
 	nextURL     *string
 	previousURL *string
+	cache       *pokecache.Cache
 }
 
 func commandExit(cfg *config) error {
@@ -78,24 +81,31 @@ func commandHelp(cfg *config) error {
 }
 func commandMap(cfg *config) error {
 	var url string
-
 	if cfg.nextURL == nil {
 		url = "https://pokeapi.co/api/v2/location-area/"
 	} else {
 		url = *cfg.nextURL
 	}
 
-	res, err := http.Get(url)
-	if err != nil {
-		return fmt.Errorf("error creating request: %w", err)
+	var data []byte
+	if cached, ok := cfg.cache.Get(url); ok {
+		data = cached
+		fmt.Println("using cached data")
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("error creating request: %w", err)
+		}
+		defer res.Body.Close()
+
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cfg.cache.Add(url, body)
+		data = body
 	}
 
-	defer res.Body.Close()
-
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
-	}
 	var response LocationAreaResponse
 	if err := json.Unmarshal(data, &response); err != nil {
 		return err
@@ -106,7 +116,6 @@ func commandMap(cfg *config) error {
 		fmt.Println(area.Name)
 	}
 	return nil
-
 }
 
 func commandMapb(cfg *config) error {
@@ -114,16 +123,25 @@ func commandMapb(cfg *config) error {
 		fmt.Println("you're on the first page")
 		return nil
 	}
-	res, err := http.Get(*cfg.previousURL)
-	if err != nil {
-		return fmt.Errorf("error creating request: %w", err)
-	}
+	url := *cfg.previousURL
 
-	defer res.Body.Close()
+	var data []byte
+	if cached, ok := cfg.cache.Get(url); ok {
+		data = cached
+		fmt.Println("using cached data")
+	} else {
+		res, err := http.Get(url)
+		if err != nil {
+			return fmt.Errorf("error creating request: %w", err)
+		}
+		defer res.Body.Close()
 
-	data, err := io.ReadAll(res.Body)
-	if err != nil {
-		return err
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return err
+		}
+		cfg.cache.Add(url, body)
+		data = body
 	}
 
 	var response LocationAreaResponse
@@ -140,7 +158,9 @@ func commandMapb(cfg *config) error {
 
 func startRepl() {
 	scanner := bufio.NewScanner(os.Stdin)
-	cfg := config{}
+	cfg := config{
+		cache: pokecache.NewCache(5 * time.Minute),
+	}
 
 	for {
 		// Mostrar el prompt
