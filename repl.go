@@ -2,7 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"strings"
 	"unicode"
@@ -11,7 +14,7 @@ import (
 type cliCommand struct {
 	name        string
 	description string
-	callback    func() error
+	callback    func(*config) error
 }
 
 var commands = map[string]cliCommand{
@@ -25,24 +28,119 @@ var commands = map[string]cliCommand{
 		description: "Exit the Pokedex",
 		callback:    commandExit,
 	},
+	"map": {
+		name:        "map",
+		description: "Displays the next 20 locations",
+		callback:    commandMap,
+	},
+	"mapb": {
+		name:        "mapb",
+		description: "displays the previous 20 locations",
+		callback:    commandMapb,
+	},
 }
 
-func commandExit() error {
+type LocationAreaResponse struct {
+	Count int `json:"count"`
+
+	Next *string `json:"next"`
+
+	Previous *string `json:"previous"`
+
+	Results []LocationArea `json:"results"`
+}
+
+type LocationArea struct {
+	Name string `json:"name"`
+
+	URL string `json:"url"`
+}
+
+type config struct {
+	nextURL     *string
+	previousURL *string
+}
+
+func commandExit(cfg *config) error {
 	fmt.Println("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
 	return nil // Nunca se ejecuta, pero satisface al compilador.
 }
 
-func commandHelp() error {
+func commandHelp(cfg *config) error {
 	fmt.Println("Welcome to the Pokedex!")
 	fmt.Println("Usage:")
 	fmt.Println()
-	fmt.Println("help: Displays a help message")
-	fmt.Println("exit: Exit the Pokedex")
+	fmt.Println("map: Displays the next 20 locations")
+	fmt.Println("mapb: Displays the previous 20 locations")
+
 	return nil
 }
+func commandMap(cfg *config) error {
+	var url string
+
+	if cfg.nextURL == nil {
+		url = "https://pokeapi.co/api/v2/location-area/"
+	} else {
+		url = *cfg.nextURL
+	}
+
+	res, err := http.Get(url)
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+	var response LocationAreaResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return err
+	}
+	cfg.nextURL = response.Next
+	cfg.previousURL = response.Previous
+	for _, area := range response.Results {
+		fmt.Println(area.Name)
+	}
+	return nil
+
+}
+
+func commandMapb(cfg *config) error {
+	if cfg.previousURL == nil {
+		fmt.Println("you're on the first page")
+		return nil
+	}
+	res, err := http.Get(*cfg.previousURL)
+	if err != nil {
+		return fmt.Errorf("error creating request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	data, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
+
+	var response LocationAreaResponse
+	if err := json.Unmarshal(data, &response); err != nil {
+		return err
+	}
+	cfg.nextURL = response.Next
+	cfg.previousURL = response.Previous
+	for _, area := range response.Results {
+		fmt.Println(area.Name)
+	}
+	return nil
+}
+
 func startRepl() {
 	scanner := bufio.NewScanner(os.Stdin)
+	cfg := config{}
 
 	for {
 		// Mostrar el prompt
@@ -70,7 +168,8 @@ func startRepl() {
 		}
 
 		// Ejecutar el callback
-		if err := cmd.callback(); err != nil {
+
+		if err := cmd.callback(&cfg); err != nil {
 			fmt.Println(err)
 		}
 	}
