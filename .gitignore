@@ -11,3 +11,7 @@
 # Coverage
 *.out
 coverage.out
+.zed
+
+pokedexcli
+
