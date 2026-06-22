@@ -57,6 +57,11 @@ var commands = map[string]cliCommand{
 		description: "Inspect a caught pokemon",
 		callback:    commandInspect,
 	},
+	"pokedex": {
+		name:        "pokedex",
+		description: "List your caught pokemon",
+		callback:    commandPokedex,
+	},
 }
 
 type LocationAreaResponse struct {
@@ -131,6 +136,7 @@ func commandHelp(cfg *config, args []string) error {
 	fmt.Println("explore: Explores an area location")
 	fmt.Println("catch: Attempt to catch a pokemon")
 	fmt.Println("inspect: Inspect a caught pokemon")
+	fmt.Println("pokedex: List your caught pokemon")
 
 	return nil
 }
@@ -301,6 +307,7 @@ func commandCatch(cfg *config, args []string) error {
 	if roll < chance {
 		cfg.pokedex[catchingPokemon.Name] = catchingPokemon
 		fmt.Printf("%s was caught!\n", catchingPokemon.Name)
+		fmt.Println("You may now inspect it with the inspect command.")
 
 	} else {
 		fmt.Printf("%s escaped!\n", pokemonName)
@@ -333,6 +340,21 @@ func commandInspect(cfg *config, args []string) error {
 	fmt.Println("Types:")
 	for _, t := range pokemon.Types {
 		fmt.Printf("  - %s\n", t.Type.Name)
+	}
+
+	return nil
+}
+
+func commandPokedex(cfg *config, args []string) error {
+	fmt.Println("Your Pokedex:")
+
+	if len(cfg.pokedex) == 0 {
+		fmt.Println(" (empty)")
+		return nil
+	}
+
+	for name := range cfg.pokedex {
+		fmt.Printf(" - %s\n", name)
 	}
 
 	return nil
